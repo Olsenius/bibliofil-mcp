@@ -56,14 +56,20 @@ Each entry shows `card_default` and `configured_default`, so you can see which o
 
 ## Run with Docker
 
-```sh
-docker build -t bibliofil-mcp .
+A multi-arch image (amd64, arm64) is built by GitHub Actions on every push to `main`:
 
+```sh
+docker pull ghcr.io/olsenius/bibliofil-mcp:latest
+```
+
+Or build it yourself with `docker build -t bibliofil-mcp .`, then:
+
+```sh
 docker run -d --name bibliofil-mcp -p 8080:8080 \
   -e BIBLIOFIL_URL -e BIBLIOFIL_USER -e BIBLIOFIL_PIN \
   -e BIBLIOFIL_PICKUP -e BIBSOK_PICKUP \
   -e MCP_AUTH_TOKEN \
-  bibliofil-mcp
+  ghcr.io/olsenius/bibliofil-mcp:latest
 ```
 
 The MCP endpoint is `http://<host>:8080/mcp` (streamable HTTP). Health check: `/healthz`.
@@ -81,7 +87,7 @@ Or over stdio, without a network port:
 ```sh
 claude mcp add bibliotek -- docker run -i --rm -e MCP_TRANSPORT=stdio \
   -e BIBLIOFIL_URL -e BIBLIOFIL_USER -e BIBLIOFIL_PIN -e BIBLIOFIL_PICKUP -e BIBSOK_PICKUP \
-  bibliofil-mcp
+  ghcr.io/olsenius/bibliofil-mcp:latest
 ```
 
 ## Tests
