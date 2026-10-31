@@ -39,7 +39,23 @@ func main() {
 		os.Exit(0)
 	}
 
-	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	log, err := newLogger(os.Stderr)
+	if err != nil {
+		slog.Error("config", "err", err)
+		os.Exit(2)
+	}
+	shutdownTracing, err := initTracing(context.Background())
+	if err != nil {
+		log.Error("tracing config", "err", err)
+		os.Exit(2)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownTracing(ctx); err != nil {
+			log.Warn("trace shutdown", "err", err)
+		}
+	}()
 	transport := env("MCP_TRANSPORT", "http")
 	a := newApp(log, openStore(env("DATA_DIR", "/data"), log))
 	if !a.current().libraryReady() {
@@ -66,8 +82,10 @@ func main() {
 	a.registerConfigAPI(mux)
 	mux.Handle("/mcp", a.mcpHandler())
 
-	srv := &http.Server{Addr: ":" + env("PORT", "8080"), Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Addr: ":" + env("PORT", "8080"), Handler: traceHTTP(mux), ReadHeaderTimeout: 10 * time.Second}
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -78,6 +96,7 @@ func main() {
 		log.Error("http", "err", err)
 		os.Exit(1)
 	}
+	<-shutdownDone
 }
 
 // requireToken accepts "Authorization: Bearer <token>". An empty token

@@ -116,7 +116,51 @@ claude mcp add bibliotek -- docker run -i --rm -e MCP_TRANSPORT=stdio \
   ghcr.io/olsenius/bibliofil-mcp:latest
 ```
 
+## Tracing and logging
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318` to export OpenTelemetry
+traces over HTTP/protobuf. Export is disabled without an endpoint. The default
+service name is `bibliofil-mcp`; override it with `OTEL_SERVICE_NAME`.
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` can specify a full `/v1/traces` URL instead.
+Standard OTLP/HTTP headers, TLS, timeout and resource environment settings are
+supported. `OTEL_SDK_DISABLED=true` or `OTEL_TRACES_EXPORTER=none` disables export.
+Only the `http/protobuf` export protocol is supported.
+
+Incoming HTTP requests continue W3C trace context from the gateway. Each MCP
+method and tool call has its own span, and library HTTP calls are child spans.
+MCP failures are marked as errors even when the HTTP response is 200. Spans
+include method, route, tool name, hostname, status and duration. They contain no
+arguments, results, query strings, headers, PINs or card numbers. Trace headers
+and baggage are not sent to the external library sites. Plain `/healthz` calls
+are excluded; authenticated checks are traced. MCP spans also work over stdio.
+Buffered spans are flushed on graceful shutdown.
+
+The default sampler is `parentbased_always_on`, which follows the gateway's
+sampling decision. For a test receiver, use `OTEL_TRACES_SAMPLER=always_on` to
+record every request, including clients that send an unsampled parent. For
+ratio sampling use `OTEL_TRACES_SAMPLER=parentbased_traceidratio` and
+`OTEL_TRACES_SAMPLER_ARG=0.1`.
+
+`LOG_LEVEL` accepts `debug`, `info` (default), `warn`, or `error`. Tracing does
+not add request/response body logs at any level. To use the same Jaeger instance
+as the gateway, add these variables to the Bibliofil Compose service:
+
+```yaml
+environment:
+  OTEL_SERVICE_NAME: bibliofil-mcp
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_TRACES_SAMPLER: always_on
+```
+
+In Jaeger, select `bibliofil-mcp`, or open a gateway trace to see both services
+in the same call tree.
+
 ## Tests
+
+`go test -race ./...` checks discovery, trace propagation through a tool call to
+a fake library, error reporting, credential omission, and OTLP export/shutdown.
+
 
 `./run-live-test.sh` runs read-only checks against your real library in Docker
 (set the same environment variables first). It never reserves, orders, renews or cancels.

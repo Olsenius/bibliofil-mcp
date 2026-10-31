@@ -44,7 +44,7 @@ func newSession(base, loginURL, postURL string, form func(user, pin string) url.
 		form:     form,
 		user:     user,
 		pin:      pin,
-		client:   &http.Client{Jar: jar, Timeout: 45 * time.Second},
+		client:   &http.Client{Jar: jar, Timeout: 45 * time.Second, Transport: tracingTransport{}},
 	}
 }
 

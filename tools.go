@@ -131,6 +131,7 @@ func need(v, name string) error {
 
 func newServer(a *app) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "bibliofil", Title: "Bibliotek", Version: version}, &mcp.ServerOptions{Instructions: instructions})
+	s.AddReceivingMiddleware(traceMCP)
 
 	mcp.AddTool(s, &mcp.Tool{Name: "list_family", Description: "List the people in the family folder (name and card number). The logged-in card holder has self=true.", Annotations: readOnly},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, familyOut, error) {
