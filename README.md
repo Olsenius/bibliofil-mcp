@@ -96,7 +96,9 @@ docker run -d --name bibliofil-mcp -p 8080:8080 \
   ghcr.io/olsenius/bibliofil-mcp:latest
 ```
 
-The MCP endpoint is `http://<host>:8080/mcp` (streamable HTTP). Health check: `/healthz`.
+The MCP endpoint is `http://<host>:8080/mcp` (stateless streamable HTTP).
+It supports MCP `2026-07-28` discovery and per-request metadata, as well as
+legacy clients using `initialize`. Health check: `/healthz`.
 The image is a static Go binary on distroless (about 20 MB) and runs as non-root.
 
 ### Claude Code

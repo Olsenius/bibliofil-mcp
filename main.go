@@ -64,10 +64,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	a.registerConfigAPI(mux)
-	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return a.server }, &mcp.StreamableHTTPOptions{
-		SessionTimeout: 30 * time.Minute,
-	})
-	mux.Handle("/mcp", requireToken(a.mcpToken, mcpHandler))
+	mux.Handle("/mcp", a.mcpHandler())
 
 	srv := &http.Server{Addr: ":" + env("PORT", "8080"), Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
@@ -97,4 +94,13 @@ func requireToken(token string, next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// mcpHandler supports per-request MCP metadata used by modern clients, while
+// retaining compatibility with clients using the legacy initialize handshake.
+func (a *app) mcpHandler() http.Handler {
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return a.server }, &mcp.StreamableHTTPOptions{
+		Stateless: true,
+	})
+	return requireToken(a.mcpToken, handler)
 }
