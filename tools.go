@@ -129,50 +129,49 @@ func need(v, name string) error {
 	return nil
 }
 
-func newServer(p *portal, b *bibsok) *mcp.Server {
+func newServer(a *app) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "bibliofil", Title: "Bibliotek", Version: version}, &mcp.ServerOptions{Instructions: instructions})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "list_family", Description: "List the people in the family folder (name and card number). The logged-in card holder has self=true.", Annotations: readOnly},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, familyOut, error) {
+			p, b, err := a.clients()
+			if err != nil {
+				return nil, familyOut{}, err
+			}
+			_, _ = p, b
 			f, err := p.Family(ctx)
 			return nil, familyOut{Family: f}, err
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "list_loans", Description: "List current loans with due date, days left, who borrowed it and whether it can be renewed.", Annotations: readOnly},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in personIn) (*mcp.CallToolResult, loansOut, error) {
+			p, b, err := a.clients()
+			if err != nil {
+				return nil, loansOut{}, err
+			}
+			_, _ = p, b
 			l, err := p.Loans(ctx, in.Person)
 			return nil, loansOut{Count: len(l), Loans: l}, err
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "renew_loans", Description: "Renew loans, by id from list_loans or all renewable loans.", Annotations: changes},
-		func(ctx context.Context, _ *mcp.CallToolRequest, in renewIn) (*mcp.CallToolResult, renewOut, error) {
-			if !in.All && len(in.IDs) == 0 {
-				return nil, renewOut{}, fmt.Errorf("give ids or set all=true")
-			}
-			r, err := p.Renew(ctx, in.IDs, in.All, in.Person)
-			return nil, renewOut{Results: r}, err
-		})
-
 	mcp.AddTool(s, &mcp.Tool{Name: "list_reservations", Description: "List reservations in the local library and interlibrary orders (made via Biblioteksøk), with queue position, pickup place and whether it is ready for pickup.", Annotations: readOnly},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in personIn) (*mcp.CallToolResult, reservationsOut, error) {
+			p, b, err := a.clients()
+			if err != nil {
+				return nil, reservationsOut{}, err
+			}
+			_, _ = p, b
 			r, err := p.Reservations(ctx, in.Person)
 			return nil, reservationsOut{Count: len(r), Reservations: r}, err
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "cancel_reservation", Description: "Cancel a reservation or interlibrary order by id from list_reservations.", Annotations: removes},
-		func(ctx context.Context, _ *mcp.CallToolRequest, in cancelIn) (*mcp.CallToolResult, cancelOut, error) {
-			if err := need(in.ID, "id"); err != nil {
-				return nil, cancelOut{}, err
-			}
-			r, err := p.CancelReservation(ctx, in.ID)
-			if err != nil {
-				return nil, cancelOut{}, err
-			}
-			return nil, cancelOut{Cancelled: *r}, nil
-		})
-
 	mcp.AddTool(s, &mcp.Tool{Name: "search_catalog", Description: "Search the local library's catalog. Shows availability per branch and if you already have it on loan.", Annotations: readOnly},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in searchIn) (*mcp.CallToolResult, searchOut, error) {
+			p, b, err := a.clients()
+			if err != nil {
+				return nil, searchOut{}, err
+			}
+			_, _ = p, b
 			if err := need(in.Query, "query"); err != nil {
 				return nil, searchOut{}, err
 			}
@@ -180,26 +179,24 @@ func newServer(p *portal, b *bibsok) *mcp.Server {
 			return nil, searchOut{TotalHits: n, Hits: h}, err
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "reserve", Description: "Reserve a title in the local library for a family member, picked up at a branch (default from BIBLIOFIL_PICKUP). Returns reserved=true once it shows up in the reservation list.", Annotations: changes},
-		func(ctx context.Context, _ *mcp.CallToolRequest, in reserveIn) (*mcp.CallToolResult, reserveOut, error) {
-			if err := need(in.TitleID, "title_id"); err != nil {
-				return nil, reserveOut{}, err
-			}
-			r, opts, err := p.Reserve(ctx, in.TitleID, in.Person, in.Pickup)
-			if err != nil && len(opts) > 0 {
-				return nil, reserveOut{Pickups: opts}, fmt.Errorf("%w; valid pickup options are listed in pickup_options", err)
-			}
-			return nil, reserveOut{Result: r}, err
-		})
-
 	mcp.AddTool(s, &mcp.Tool{Name: "loan_history", Description: "Search the logged-in card holder's loan history (what has been borrowed before).", Annotations: readOnly},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in historyIn) (*mcp.CallToolResult, historyOut, error) {
+			p, b, err := a.clients()
+			if err != nil {
+				return nil, historyOut{}, err
+			}
+			_, _ = p, b
 			n, items, err := p.History(ctx, in.Query, in.Year, limitOr(in.Limit, 50))
 			return nil, historyOut{Matches: n, Items: items}, err
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "search_national", Description: "Search all Norwegian libraries via Biblioteksøk. Use when the local library does not have a title.", Annotations: readOnly},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in nationalSearchIn) (*mcp.CallToolResult, nationalSearchOut, error) {
+			p, b, err := a.clients()
+			if err != nil {
+				return nil, nationalSearchOut{}, err
+			}
+			_, _ = p, b
 			if err := need(in.Query, "query"); err != nil {
 				return nil, nationalSearchOut{}, err
 			}
@@ -209,6 +206,11 @@ func newServer(p *portal, b *bibsok) *mcp.Server {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "national_holdings", Description: "Show which libraries in Norway own a title (from search_national) and how many copies are free.", Annotations: readOnly},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in holdingsIn) (*mcp.CallToolResult, TitleHoldings, error) {
+			p, b, err := a.clients()
+			if err != nil {
+				return nil, TitleHoldings{}, err
+			}
+			_, _ = p, b
 			if err := need(in.TitleID, "title_id"); err != nil {
 				return nil, TitleHoldings{}, err
 			}
@@ -219,20 +221,13 @@ func newServer(p *portal, b *bibsok) *mcp.Server {
 			return nil, *h, nil
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "order_interlibrary", Description: "Order a title from another library via Biblioteksøk, delivered to the pickup library (default from BIBSOK_PICKUP). Always for the logged-in card holder.", Annotations: changes},
-		func(ctx context.Context, _ *mcp.CallToolRequest, in orderIn) (*mcp.CallToolResult, OrderResult, error) {
-			if err := need(in.TitleID, "title_id"); err != nil {
-				return nil, OrderResult{}, err
-			}
-			r, err := b.Order(ctx, in.TitleID, in.Pickup)
-			if err != nil {
-				return nil, OrderResult{}, err
-			}
-			return nil, *r, nil
-		})
-
 	mcp.AddTool(s, &mcp.Tool{Name: "list_pickup_locations", Description: "List valid pickup locations and their codes, which default the card uses, and which one is set in the environment (BIBLIOFIL_PICKUP for reserve, BIBSOK_PICKUP for order_interlibrary).", Annotations: readOnly},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in pickupsIn) (*mcp.CallToolResult, pickupsOut, error) {
+			p, b, err := a.clients()
+			if err != nil {
+				return nil, pickupsOut{}, err
+			}
+			_, _ = p, b
 			if strings.EqualFold(in.Kind, "national") {
 				l, err := b.PickupLocations(ctx, in.Filter)
 				return nil, pickupsOut{Kind: "national", EnvVar: "BIBSOK_PICKUP", EnvValue: b.pickup, Locations: l}, err
@@ -240,6 +235,75 @@ func newServer(p *portal, b *bibsok) *mcp.Server {
 			l, err := p.PickupLocations(ctx)
 			return nil, pickupsOut{Kind: "local", EnvVar: "BIBLIOFIL_PICKUP", EnvValue: p.pickup, Locations: l}, err
 		})
+
+	a.writeTools = []string{"renew_loans", "cancel_reservation", "reserve", "order_interlibrary"}
+	a.addWrite = func() {
+		mcp.AddTool(s, &mcp.Tool{Name: "renew_loans", Description: "Renew loans, by id from list_loans or all renewable loans.", Annotations: changes},
+			func(ctx context.Context, _ *mcp.CallToolRequest, in renewIn) (*mcp.CallToolResult, renewOut, error) {
+				p, b, err := a.clients()
+				if err != nil {
+					return nil, renewOut{}, err
+				}
+				_, _ = p, b
+				if !in.All && len(in.IDs) == 0 {
+					return nil, renewOut{}, fmt.Errorf("give ids or set all=true")
+				}
+				r, err := p.Renew(ctx, in.IDs, in.All, in.Person)
+				return nil, renewOut{Results: r}, err
+			})
+
+		mcp.AddTool(s, &mcp.Tool{Name: "cancel_reservation", Description: "Cancel a reservation or interlibrary order by id from list_reservations.", Annotations: removes},
+			func(ctx context.Context, _ *mcp.CallToolRequest, in cancelIn) (*mcp.CallToolResult, cancelOut, error) {
+				p, b, err := a.clients()
+				if err != nil {
+					return nil, cancelOut{}, err
+				}
+				_, _ = p, b
+				if err := need(in.ID, "id"); err != nil {
+					return nil, cancelOut{}, err
+				}
+				r, err := p.CancelReservation(ctx, in.ID)
+				if err != nil {
+					return nil, cancelOut{}, err
+				}
+				return nil, cancelOut{Cancelled: *r}, nil
+			})
+
+		mcp.AddTool(s, &mcp.Tool{Name: "reserve", Description: "Reserve a title in the local library for a family member, picked up at a branch (default from BIBLIOFIL_PICKUP). Returns reserved=true once it shows up in the reservation list.", Annotations: changes},
+			func(ctx context.Context, _ *mcp.CallToolRequest, in reserveIn) (*mcp.CallToolResult, reserveOut, error) {
+				p, b, err := a.clients()
+				if err != nil {
+					return nil, reserveOut{}, err
+				}
+				_, _ = p, b
+				if err := need(in.TitleID, "title_id"); err != nil {
+					return nil, reserveOut{}, err
+				}
+				r, opts, err := p.Reserve(ctx, in.TitleID, in.Person, in.Pickup)
+				if err != nil && len(opts) > 0 {
+					return nil, reserveOut{Pickups: opts}, fmt.Errorf("%w; valid pickup options are listed in pickup_options", err)
+				}
+				return nil, reserveOut{Result: r}, err
+			})
+
+		mcp.AddTool(s, &mcp.Tool{Name: "order_interlibrary", Description: "Order a title from another library via Biblioteksøk, delivered to the pickup library (default from BIBSOK_PICKUP). Always for the logged-in card holder.", Annotations: changes},
+			func(ctx context.Context, _ *mcp.CallToolRequest, in orderIn) (*mcp.CallToolResult, OrderResult, error) {
+				p, b, err := a.clients()
+				if err != nil {
+					return nil, OrderResult{}, err
+				}
+				_, _ = p, b
+				if err := need(in.TitleID, "title_id"); err != nil {
+					return nil, OrderResult{}, err
+				}
+				r, err := b.Order(ctx, in.TitleID, in.Pickup)
+				if err != nil {
+					return nil, OrderResult{}, err
+				}
+				return nil, *r, nil
+			})
+
+	}
 
 	return s
 }

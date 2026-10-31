@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -18,8 +19,9 @@ import (
 // https://<library host>/cgi-bin/m2. One login covers the whole
 // family folder (familiemappe).
 type portal struct {
-	s      *session
-	pickup string // default pickup branch code; empty = the card's default
+	s        *session
+	pickupMu sync.Mutex
+	pickup   string // default pickup branch code; empty = the card's default
 }
 
 const m2 = "/cgi-bin/m2"
@@ -646,7 +648,7 @@ func (p *portal) PickupLocations(ctx context.Context) ([]PickupOption, error) {
 	doc.Find("form#resForm select[name='henteavdeling'] option").Each(func(_ int, o *goquery.Selection) {
 		opt := PickupOption{Code: o.AttrOr("value", ""), Name: clean(o.Text())}
 		_, opt.CardDefault = o.Attr("selected")
-		opt.Configured = p.pickup != "" && strings.EqualFold(opt.Code, p.pickup)
+		opt.Configured = p.defaultPickup() != "" && strings.EqualFold(opt.Code, p.defaultPickup())
 		out = append(out, opt)
 	})
 	if len(out) == 0 {
@@ -755,7 +757,7 @@ func (p *portal) Reserve(ctx context.Context, titleID, person, pickup string) (*
 		opts = append(opts, PickupOption{Code: o.AttrOr("value", ""), Name: clean(o.Text())})
 	})
 	if pickup == "" {
-		pickup = p.pickup
+		pickup = p.defaultPickup()
 	}
 	if pickup != "" && len(opts) > 0 {
 		var chosen *PickupOption
@@ -864,4 +866,16 @@ func (p *portal) History(ctx context.Context, query string, year int, limit int)
 		}
 	})
 	return total, out, nil
+}
+
+func (p *portal) setPickup(v string) {
+	p.pickupMu.Lock()
+	p.pickup = v
+	p.pickupMu.Unlock()
+}
+
+func (p *portal) defaultPickup() string {
+	p.pickupMu.Lock()
+	defer p.pickupMu.Unlock()
+	return p.pickup
 }

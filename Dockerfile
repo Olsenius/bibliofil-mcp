@@ -9,11 +9,14 @@ ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/bibliofil-mcp .
+RUN mkdir -p -m 700 /out/data
 
 FROM gcr.io/distroless/static-debian12:nonroot
 LABEL org.opencontainers.image.source="https://github.com/Olsenius/bibliofil-mcp"
 COPY --from=build /out/bibliofil-mcp /bibliofil-mcp
-ENV PORT=8080 MCP_TRANSPORT=http
+COPY --from=build --chown=65532:65532 /out/data /data
+ENV PORT=8080 MCP_TRANSPORT=http DATA_DIR=/data
+VOLUME /data
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s CMD ["/bibliofil-mcp", "-healthcheck"]
 ENTRYPOINT ["/bibliofil-mcp"]

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -16,8 +17,9 @@ import (
 // bibsok is the national search (bibsok.no), used to order books from
 // other libraries. Orders are always for the logged-in card.
 type bibsok struct {
-	s      *session
-	pickup string // default pickup library number; empty = the card's home library
+	s        *session
+	pickupMu sync.Mutex
+	pickup   string // default pickup library number; empty = the card's home library
 }
 
 func newBibsok(base, user, pin, pickup string) *bibsok {
@@ -132,7 +134,7 @@ func (b *bibsok) PickupLocations(ctx context.Context, filter string) ([]PickupOp
 	form.Find("input[name='hentebib']").Each(func(_ int, r *goquery.Selection) {
 		o := PickupOption{Code: r.AttrOr("value", ""), Name: labelFor(form, r.AttrOr("id", ""))}
 		_, o.CardDefault = r.Attr("checked")
-		o.Configured = b.pickup != "" && o.Code == b.pickup
+		o.Configured = b.defaultPickup() != "" && o.Code == b.defaultPickup()
 		if f == "" || strings.Contains(strings.ToLower(o.Name), f) || o.Code == f {
 			out = append(out, o)
 		}
@@ -205,7 +207,7 @@ func (b *bibsok) Order(ctx context.Context, titleID, pickup string) (*OrderResul
 	vals.Del("sokbib")
 
 	if pickup == "" {
-		pickup = b.pickup
+		pickup = b.defaultPickup()
 	}
 	res := &OrderResult{TitleID: titleID}
 	if pickup != "" {
@@ -261,4 +263,16 @@ func (b *bibsok) Order(ctx context.Context, titleID, pickup string) (*OrderResul
 		res.Message = msg
 	}
 	return res, nil
+}
+
+func (b *bibsok) setPickup(v string) {
+	b.pickupMu.Lock()
+	b.pickup = v
+	b.pickupMu.Unlock()
+}
+
+func (b *bibsok) defaultPickup() string {
+	b.pickupMu.Lock()
+	defer b.pickupMu.Unlock()
+	return b.pickup
 }
