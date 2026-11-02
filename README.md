@@ -51,7 +51,8 @@ starts, and the tools answer with an error until the account is set up.
 
 To use the server from claude.ai or ChatGPT, run it behind [mcp-gateway](https://github.com/Olsenius/mcp-gateway).
 The gateway adds OAuth login, and its admin page shows these settings as a form with a **Test** button.
-The gateway's repository has a `docker-compose.yml` that sets up both, plus Tailscale Funnel.
+The [gateway's Compose example](https://github.com/Olsenius/mcp-gateway#quick-start-docker-compose) runs the gateway, this server and the other MCP servers,
+plus Tailscale Funnel. To develop the server together with the gateway, use [mcp-workspace](https://github.com/Olsenius/mcp-workspace).
 
 The server implements the gateway contract (all but plain `/healthz` need `Authorization: Bearer <CONFIG_TOKEN>`):
 
